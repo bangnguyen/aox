@@ -10,10 +10,19 @@ GET     /assets/*file               controllers.Assets.at(path="/public", file)
 
 
 
-POST      /users        APIs.UserRestService.signUp
+POST      /users                               APIs.UserRestService.signUp
+POST     /users/:username/password_reset       APIs.UserRestService.resetPassword(username:String)
 
-#POST      /users        controllers.UserRestService.signUp
 
-POST    /hello                      APIs.UserRestService.sayHello
 
-PUT     /users/:username/password   APIs.UserRestService.changePassword(username:String)
+
+PUT     /users/:username/password              APIs.UserRestService.changePassword(username:String)
+PUT     /users/:username/put                   APIs.UserRestService.put(username:String)
+
+
+
+
+
+GET     /users/:username                       APIs.UserRestService.list(username:String)
+
+

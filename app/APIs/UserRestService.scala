@@ -5,6 +5,7 @@ import play.api.mvc.{Action, Controller}
 import play.api.libs.json.Json.toJson
 import scala._
 import core.dao.InMemoryUserService
+import scala.Predef._
 import models.User.UsernamePreviouslyExistentException
 import scala.Some
 import models.User.EmailPreviouslyExistentException
@@ -29,23 +30,30 @@ object UserRestService extends Controller {
   private val UPDATED_AT_KEY = "updated"
   private val MESSAGE_KEY = "message"
   private val STATUS_KEY = "status"
+  private val MISSING_PARAMS_MSG = "Required parameter is missing"
+  private val REQUIRE_KEY = "require"
+  private val LINKS_KEY = "_links"
+  private val HREF_KEY = "href"
+  private val SELF_KEY = "self"
 
   private val OK_MSG = "OK"
   private val NOT_OK_MSG = "KO"
-  private val MISSING_PAR_MSG = "Missing parameter [%s]"
+
 
   private def errorResponse(msg: String) = BadRequest(toJson(Map(STATUS_KEY -> NOT_OK_MSG, MESSAGE_KEY -> msg)))
 
-  private def missingParameterResponse(parameter: String) = errorResponse(MISSING_PAR_MSG.format(parameter))
 
   private def userToJson(user: User) = toJson(userToMap(user))
 
+
   private def userToMap(user: User) = Map(
-    USERNAME_KEY -> user.username.get.toString(),
+
+    LINKS_KEY -> toJson(Map(SELF_KEY -> toJson(Map(HREF_KEY -> "/users/".concat(user.username.get.toString))))).toString(),
     OBJECT_ID_KEY -> user.id.toString(),
-    CREATED_AT_KEY -> user.created.toString,
+    CREATED_AT_KEY -> user.created.get.toString,
     UPDATED_AT_KEY -> user.updated.get.toString(),
-    EMAIL_KEY -> user.email.get.toString()
+    EMAIL_KEY -> user.email.get.toString(),
+    USERNAME_KEY -> user.username.get.toString()
   )
 
 
@@ -55,12 +63,14 @@ object UserRestService extends Controller {
 
   def signUp = Action(parse.json) {
     implicit request =>
-      println(request.body.getClass)
+    //  println(request.body.getClass)
       var username = (request.body \ USERNAME_KEY)
       var email = (request.body \ EMAIL_KEY)
       def requisitionToNewUser = (username.asOpt[String], email.asOpt[String]) match {
+        case (None, _) => Left(NotFound(toJson(Map(MESSAGE_KEY -> MISSING_PARAMS_MSG, REQUIRE_KEY -> List("username").toString()))))
+        case (_, None) => Left(NotFound(toJson(Map(MESSAGE_KEY -> MISSING_PARAMS_MSG, REQUIRE_KEY -> List("email").toString()))))
+        case (None, None) => Left(NotFound(toJson(Map(MESSAGE_KEY -> MISSING_PARAMS_MSG, REQUIRE_KEY -> List("username", "email").toString()))))
         case (Some(u), _) if (u.trim.isEmpty) | (u.trim.length() > 128 | (!u.matches("[a-zA-Z0-9-_.]*"))) => Left(Forbidden("The username is not valid"))
-        case (None, _) => Left(NotAcceptable("The username must not empty"))
         case (_, Some(e)) if (!e.trim.isEmpty && !isValid(e)) =>
           Left(NotAcceptable("The provided email is not valid"))
         case (Some(_), None) => Left(NotAcceptable("The email must not empty"))
@@ -71,7 +81,7 @@ object UserRestService extends Controller {
 
       requisitionToNewUser match {
         case Right(user) =>
-          User.include(user) match {
+          InMemoryUserService.findByUsernameOrEmail(user) match {
             case Right(newUser) => {
               Created(userToJson(newUser)).withHeaders(CONTENT_LOCATION -> USER_PREFIX_CONTENT_LOCATION.concat(username.asOpt[String].get))
             }
@@ -119,17 +129,53 @@ object UserRestService extends Controller {
   }
 
 
-  /**
-   * Dummy method just to test JSON.
-   */
-  def sayHello = Action(parse.json) {
-    request =>
-      (request.body \ "name").asOpt[String].map {
-        name =>
-          Ok(toJson(Map("status" -> "OK", "message" -> ("Hello " + name))))
-      }.getOrElse {
-        missingParameterResponse("name")
+  def resetPassword(username: String) = Action(parse.json) {
+    implicit request =>
+      val email = (request.body \ EMAIL_KEY)
+      def emailOpt = (email.asOpt[String])
+      // println(emailOpt)
+      emailOpt match {
+        case None => NotFound(toJson(Map(MESSAGE_KEY -> MISSING_PARAMS_MSG, REQUIRE_KEY -> List("email").toString())))
+        case (Some(e)) if (!isValid(e)) => NotAcceptable("The provided email is not valid")
+        case (Some(_)) => {
+          val user = InMemoryUserService.findUserByUsername(username)
+          user match {
+            case None => NotFound("No user bound to the " + username + " provided.")
+            case (Some(u)) if (!u.email.equals(emailOpt)) => Conflict("No user bound to the " + username + " provided.")
+            case (_) => {
+              // send email here
+              NoContent
+            }
+          }
+        }
+
       }
+  }
+
+
+  def list(username: String) = Action(parse.json) {
+    implicit request =>
+      val user = InMemoryUserService.findUserByUsername(username)
+      user match {
+        case None => NotFound("No user bound to the username" + username + " provided.")
+        case Some(u) => {
+          Ok(userToJson(u))
+        }
+
+      }
+  }
+
+
+  def put(username: String) = Action(parse.json) {
+    implicit request =>
+      val user = InMemoryUserService.findUserByUsername(username)
+      user match {
+        case None => NotFound("No user bound to the username " + username + " provided.")
+        case Some(e) => {
+
+        }
+      }
+     Ok("lala")
   }
 
 
